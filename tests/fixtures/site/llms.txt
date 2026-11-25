@@ -1,0 +1,14 @@
+# Example React Docs
+
+> Documentation for a small React-like library, indexed for LLM consumption.
+
+## Reference
+
+- [memo](/reference/memo.html): Skip re-rendering when props are unchanged
+- [useMemo](/reference/use-memo.md): Cache the result of a calculation between renders
+- [Pfeile](/reference/unicode.html): Non-ASCII text handling
+
+## Other
+
+- [Secret](/private/secret.html): Internal page that robots.txt disallows
+- [Missing](/missing.html): A page that no longer exists

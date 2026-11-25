@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Performance guide</title></head>
+<body>
+<main>
+<h1>Performance guide</h1>
+<p>Before optimising anything, measure. Use the profiler to find components that render more often than expected, then decide whether the cost justifies a fix.</p>
+<h2>Common techniques</h2>
+<p>Split large components, move state down, and as a last resort apply memoization with memo or useMemo so that expensive rendering work is skipped when inputs have not changed.</p>
+</main>
+</body>
+</html>

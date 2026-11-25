@@ -1,0 +1,13 @@
+# Example React Docs (full)
+
+## memo
+
+`memo` lets you skip re-rendering a component when its props are unchanged. Wrap your component in `memo` and React will compare the previous and next props shallowly before deciding whether rendering is needed.
+
+## useMemo
+
+`useMemo` is a hook that lets you cache the result of a calculation between re-renders. Pass a calculation function and a list of dependencies; React only recalculates when a dependency changes.
+
+## Performance guide
+
+Measure before optimising. Profile your application, find components that render too often, and only then reach for memoization techniques.

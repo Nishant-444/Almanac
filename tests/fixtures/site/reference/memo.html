@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>memo - React Reference</title></head>
+<body>
+<main>
+<h1>memo</h1>
+<p>memo lets you skip re-rendering a component when its props are unchanged. Wrap a component in memo to get a memoized version that React reuses as long as its props stay the same.</p>
+<h2>Usage</h2>
+<p>Call memo around your component definition. React compares the previous and next props shallowly during rendering. If every prop is equal, React skips re-rendering the component and reuses the last result.</p>
+<pre><code>const Greeting = memo(function Greeting({ name }) {
+  return &lt;h1&gt;Hello, {name}&lt;/h1&gt;;
+});</code></pre>
+<h2>Caveats</h2>
+<p>Memoization is a performance optimization, not a semantic guarantee. If props contain new object or function identities on every render, memo cannot help.</p>
+</main>
+</body>
+</html>
