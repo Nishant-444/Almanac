@@ -1,0 +1,39 @@
+[project]
+name = "almanac"
+version = "0.1.0"
+description = "Local-first docs knowledge base: CLI and stdio MCP server."
+authors = [
+    { name = "Nishant Sharma", email = "197467920+Nishant-444@users.noreply.github.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "defusedxml>=0.7.1",
+    "httpx>=0.28.1",
+    "markdownify>=1.2.4",
+    "mcp>=2.3.0",
+    "pydantic>=2",
+    "ruamel-yaml>=0.19.1",
+    "typer>=0.29.2",
+]
+
+[project.scripts]
+almanac = "almanac.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+    "ruff>=0.17.6",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

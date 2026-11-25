@@ -1,0 +1,42 @@
+settings:
+  data_dir: ./data
+  contact: you@example.com
+  embedding_model: bge-small-en
+  response_token_budget: 3000
+  default_refresh_hours: 24
+  rate_limit_per_host_rps: 1
+  stale_after_days: 14
+
+technologies:
+  - id: react
+    name: React
+    aliases: [reactjs, react.js]
+    versions: ["19", latest]
+    sources:
+      - id: react-docs
+        type: llms_txt
+        url: https://example.org/llms.txt
+        kind: reference
+        trust: 1
+      - id: react-releases
+        type: feed
+        url: https://example.org/releases.atom
+        kind: changelog
+        trust: 1
+      - id: react-practices
+        type: url_list
+        urls: [https://example.org/guides/performance]
+        kind: best_practice
+        trust: 2
+    refresh_hours: 24
+  - id: python
+    name: Python
+    aliases: [py, python3]
+    versions: ["3.12"]
+    sources:
+      - id: python-docs
+        type: git
+        url: https://example.org/cpython.git
+        kind: reference
+        trust: 1
+        paths: [Doc]
