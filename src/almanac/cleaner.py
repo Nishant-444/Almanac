@@ -12,6 +12,7 @@ from urllib.parse import unquote, urljoin, urlparse
 from bs4 import BeautifulSoup, Comment
 from bs4.element import Tag
 from markdownify import markdownify
+from ruamel.yaml import YAML, YAMLError
 
 from almanac.models import Page, RawDoc, Source, Technology
 from almanac.store import content_hash, identity_url
@@ -24,7 +25,13 @@ _COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
 _DEPRECATED = re.compile(r"\b(deprecated|legacy|removed in)\b", re.IGNORECASE)
 _H1 = re.compile(r"^# +(.+?)\s*$", re.MULTILINE)
 _HEADING_LINE = re.compile(r"^#{1,6} .*$", re.MULTILINE)
-_ID_SUFFIX = re.compile(r"\s*\{#[^}]*\}\s*$")
+_ID_SUFFIX = re.compile(r"\s*\{(?:#[^}]*|/\*[^}]*\*/)\}\s*$")
+_FRONT_MATTER = re.compile(r"\A---[ \t]*\n(.*?)\n---[ \t]*(?:\n|\Z)", re.DOTALL)
+# A line holding only an MDX/JSX component tag (capitalised name), e.g. <Sandpack>, </Note>, <Solution />.
+_JSX_TAG_LINE = re.compile(r"^[ \t]*</?[A-Z][\w.]*(?:\s[^<>]*)?/?>[ \t]*\n?", re.MULTILINE)
+_FENCE_OPENER = re.compile(r"^([ \t]*(?:`{3,}|~{3,}))(.*)$")
+_BRACES = re.compile(r"\{[^{}]*\}")
+_DOC_EXT = re.compile(r"\.(?:md|mdx|markdown|html?|txt)$", re.IGNORECASE)
 _BOILERPLATE_TOKEN = re.compile(
     r"^(cookie.*|consent.*|ads?|advert.*|sidebar|breadcrumbs?|toc|table-of-contents)$", re.IGNORECASE
 )
@@ -61,7 +68,8 @@ def clean(raw: RawDoc, source: Source, tech: Technology, page_id: str, min_conte
         title, description, canonical, licence = _head_meta(soup, raw.final_url)
         body = _html_to_markdown(soup, raw.final_url)
     else:
-        body = _strip_md_comments(_decode(raw).lstrip("\ufeff"))
+        body, title, description = _front_matter(_decode(raw).lstrip("\ufeff"))
+        body = _strip_md_comments(body)
     body = _normalise(body)
     if not title:
         m = _H1.search(_outside_fences(body))
@@ -186,9 +194,44 @@ def _split_fences(text: str) -> list[tuple[bool, str]]:
     return [(f, "".join(lines)) for f, lines in segments]
 
 
+def _front_matter(text: str) -> tuple[str, str | None, str | None]:
+    """Split a leading YAML front-matter block off markdown; return (body, title, description)."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    m = _FRONT_MATTER.match(text)
+    if not m:
+        return text, None, None
+    try:
+        data = YAML(typ="safe").load(m.group(1))
+    except YAMLError:
+        return text, None, None
+    if not isinstance(data, dict):
+        return text, None, None
+
+    def field(key: str) -> str | None:
+        value = data.get(key)
+        return (" ".join(value.split()) or None) if isinstance(value, str) else None
+
+    return text[m.end() :], field("title"), field("description")
+
+
 def _strip_md_comments(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    return "".join(seg if fenced else _strip_hidden_html(_COMMENT.sub("", seg)) for fenced, seg in _split_fences(text))
+    return "".join(
+        _clean_fence_info(seg) if fenced else _JSX_TAG_LINE.sub("", _strip_hidden_html(_COMMENT.sub("", seg)))
+        for fenced, seg in _split_fences(text)
+    )
+
+
+def _clean_fence_info(seg: str) -> str:
+    """Drop MDX ``{...}`` metadata from a fence's info string, keeping the language and file name."""
+    first, nl, rest = seg.partition("\n")
+    m = _FENCE_OPENER.match(first)
+    if not m or "{" not in m.group(2):
+        return seg
+    info = m.group(2)
+    while _BRACES.search(info):
+        info = _BRACES.sub(" ", info)
+    return f"{m.group(1)}{' '.join(info.split())}{nl}{rest}"
 
 
 def _strip_hidden_html(text: str) -> str:
@@ -238,4 +281,7 @@ def _normalise(text: str) -> str:
 
 def _url_title(url: str) -> str:
     segs = [s for s in urlparse(url).path.split("/") if s]
-    return unquote(segs[-1]) if segs else (urlparse(url).hostname or url)
+    if not segs:
+        return urlparse(url).hostname or url
+    name = unquote(segs[-1])
+    return _DOC_EXT.sub("", name) or name

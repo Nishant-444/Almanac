@@ -70,3 +70,13 @@ def test_no_query_tokens_returns_empty(indexed_root, cfg):
 def test_fts_syntax_never_crashes(indexed_root, cfg, q):
     r = retriever(indexed_root)
     assert isinstance(r.search(understand(q, cfg, r.indexed_versions(), tech="react")), list)
+
+
+@pytest.mark.parametrize(
+    ("title", "matches"),
+    [("memo", True), ("memo.md", True), ("useMemo", False), ("Thinking in React", False), ("", False)],
+)
+def test_title_matches_query(title, matches):
+    from almanac.query.retrieve import title_matches
+
+    assert title_matches(title, '"skip" OR "re" OR "rendering" OR "memo"') is matches

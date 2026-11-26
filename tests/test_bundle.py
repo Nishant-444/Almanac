@@ -229,3 +229,36 @@ def test_cut_closes_fence_when_answer_starts_with_one(interp):
     a = b["answer"]["text"]
     assert a.startswith("```py") and a.endswith("\n``` …")
     assert _fences(render_markdown(b)) % 2 == 0
+
+
+_CODE = "```js\n" + "const a = 1;\n" * 30 + "```"
+
+
+def test_adjacent_chunks_of_one_section_merge_in_page_order(interp):
+    first = _hit(1, text="#### Skip\n\nIntro prose here.", page_id="p", anchor="skip", ord=3, score=1.0)
+    second = _hit(2, text="Intro prose here.\n\nMore prose.", page_id="p", anchor="skip", ord=4, score=2.0)
+    b = build_bundle(interp, [second, _hit(9), first], max_tokens=4000, stale_after_days=90, now=NOW)
+    assert b["answer"]["text"] == "#### Skip\n\nIntro prose here.\n\nMore prose."  # overlap not repeated
+    assert len(b["excerpts"]) == 1
+
+
+def test_non_adjacent_chunks_are_not_merged(interp):
+    a = _hit(1, text="First.", page_id="p", anchor="skip", ord=3)
+    c = _hit(2, text="Third.", page_id="p", anchor="skip", ord=5)
+    b = build_bundle(interp, [a, c], max_tokens=4000, stale_after_days=90, now=NOW)
+    assert b["answer"]["text"] == "First." and b["excerpts"][0]["text"] == "Third."
+
+
+def test_answer_prefers_prose_over_a_code_only_chunk(interp):
+    code = _hit(1, text=_CODE, score=2.0)
+    prose = _hit(2, text="Wrap the component in memo to skip re-rendering. " * 3, score=1.5)
+    b = build_bundle(interp, [code, prose], max_tokens=4000, stale_after_days=90, now=NOW)
+    assert b["answer"]["text"].startswith("Wrap the component")
+    assert b["excerpts"][0]["text"] == _CODE
+
+
+def test_code_answer_kept_when_prose_scores_far_lower(interp):
+    code = _hit(1, text=_CODE, score=10.0)
+    prose = _hit(2, text="Unrelated prose sentence here.", score=1.0)
+    b = build_bundle(interp, [code, prose], max_tokens=4000, stale_after_days=90, now=NOW)
+    assert b["answer"]["text"] == _CODE

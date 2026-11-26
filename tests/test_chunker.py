@@ -105,3 +105,13 @@ def test_continuation_never_starts_with_heading(make_page):
     assert len(cs) >= 2
     assert all(not c.text.startswith("## ") for c in cs[1:])
     assert estimate_tokens(cs[1].text.split("\n\n")[0]) <= 50
+
+
+def test_mdx_heading_id_marker_feeds_anchor_and_is_hidden(make_page):
+    body = "## Usage {/*usage*/}\n\nText.\n\n### Skipping with `memo` {/*skipping-with-memo*/}\n\nMore.\n"
+    cs = chunk_page(make_page(body=body))
+    assert [(c.heading_path, c.anchor) for c in cs] == [
+        ("Usage", "usage"),
+        ("Usage > Skipping with `memo`", "skipping-with-memo"),
+    ]
+    assert all("{/*" not in c.text for c in cs)

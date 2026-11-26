@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass, field
 
@@ -8,10 +9,22 @@ from almanac.errors import AlmanacError
 from almanac.query.understand import Interpretation, _tuple
 
 _TRUST_BOOST = {1: 1.0, 2: 0.66, 3: 0.33, 4: 0.0}
+_TITLE_BOOST = 1.25  # the page is about exactly what was asked (e.g. title "memo", query "... memo")
 _CANDIDATES = 40
+_WORD_RE = re.compile(r"\w+")
+_QUOTED_RE = re.compile(r'"([^"]+)"')
+_DOC_EXT = re.compile(r"\.(?:md|mdx|markdown|html?|txt)$", re.IGNORECASE)
+
+
+def title_matches(title: str, fts_query: str | None) -> bool:
+    """True when every word of the page title is one of the query's search terms."""
+    words = _WORD_RE.findall(_DOC_EXT.sub("", title or "").lower())
+    terms = set(_QUOTED_RE.findall(fts_query or ""))
+    return bool(words) and all(w in terms for w in words)
+
 
 _SQL = """
-SELECT c.id AS chunk_id, p.page_key, p.title, c.heading_path, c.anchor, c.text, p.url,
+SELECT c.id AS chunk_id, c.ord, p.page_key, p.title, c.heading_path, c.anchor, c.text, p.url,
        p.version, p.kind, p.trust, p.fetched_at, p.flags,
        bm25(chunk_fts, 1.0, 2.0, 0.5) AS rank
 FROM chunk_fts
@@ -38,6 +51,7 @@ class Hit:
     fetched_at: str
     flags: list[str] = field(default_factory=list)
     score: float = 0.0
+    ord: int = 0  # the chunk's position in its page
 
 
 def _version_key(v: str) -> tuple:
@@ -96,7 +110,10 @@ class Retriever:
                 trust=r["trust"],
                 fetched_at=r["fetched_at"],
                 flags=json.loads(r["flags"] or "[]"),
-                score=-r["rank"] * (1 + 0.15 * _TRUST_BOOST.get(r["trust"], 0.0)),
+                score=-r["rank"]
+                * (1 + 0.15 * _TRUST_BOOST.get(r["trust"], 0.0))
+                * (_TITLE_BOOST if title_matches(r["title"], i.fts_query) else 1.0),
+                ord=r["ord"],
             )
             for r in rows
         ]

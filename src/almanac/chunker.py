@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from almanac.models import Page
 
 _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
-_ID_RE = re.compile(r"\s*\{#([^}\s]+)\}\s*$")
+# An explicit heading id: ``{#id}`` (Markdown extensions) or ``{/*id*/}`` (MDX, e.g. react.dev).
+_ID_RE = re.compile(r"\s*\{(?:#([^}\s]+)|/\*\s*([^*\s]+)\s*\*/)\}\s*$")
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 
@@ -53,9 +54,11 @@ def _slug(text: str) -> str:
 
 
 def heading_anchor(heading_text: str) -> str:
-    """Anchor for a heading's text: an explicit ``{#id}`` first, otherwise the slug."""
+    """Anchor for a heading's text: an explicit ``{#id}``/``{/*id*/}`` first, otherwise the slug."""
     id_match = _ID_RE.search(heading_text)
-    return id_match.group(1) if id_match else _slug(_ID_RE.sub("", heading_text).strip())
+    if id_match:
+        return id_match.group(1) or id_match.group(2)
+    return _slug(heading_text.strip())
 
 
 def _sections(page: Page) -> list[_Section]:
@@ -84,7 +87,7 @@ def _sections(page: Page) -> list[_Section]:
             stack.pop()
         stack.append((level, title))
         path = " > ".join(t for _, t in stack)
-        # The {#id} marker only feeds the anchor; users never see it in chunk text.
+        # The id marker only feeds the anchor; users never see it in chunk text.
         sections.append(_Section(path, anchor, _ID_RE.sub("", line), []))
     return sections
 

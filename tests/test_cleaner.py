@@ -164,3 +164,36 @@ def test_markdown_hidden_html_removed_outside_fences_only(react_tech, ref_source
     assert "before  after" in body or "before after" in body
     assert "mid" in body and "<kbd>Ctrl</kbd>" in body
     assert '<div style="display:none">IN-FENCE</div>' in body
+
+
+def _md(ref_source, react_tech, md: str, url: str = URL):
+    return clean(_raw(md.encode(), "text/markdown", url), ref_source, react_tech, "p")
+
+
+def test_markdown_front_matter_gives_title_and_is_removed(ref_source, react_tech):
+    md = "---\ntitle: memo\n---\n\n`memo` lets you skip re-rendering a component when its props are unchanged.\n"
+    page = _md(ref_source, react_tech, md)
+    assert page.title == "memo"
+    assert not page.body.startswith("---") and "title: memo" not in page.body
+
+
+def test_url_title_drops_file_extension(ref_source, react_tech):
+    page = _md(ref_source, react_tech, "No heading here.\n", url="https://docs.test/reference/memo.md")
+    assert page.title == "memo"
+
+
+def test_mdx_component_tag_lines_are_removed_but_content_kept(ref_source, react_tech):
+    md = (
+        "## Example\n\n<Sandpack>\n\n```js\n<Sandpack>\nconst x = 1;\n```\n\n</Sandpack>\n\n<Solution />\n\n"
+        '<Recipes titleText="Examples">\n\nWrap `<Suspense>` around it.\n\n</Recipes>\n'
+    )
+    body = _md(ref_source, react_tech, md).body
+    assert "</Sandpack>" not in body and "<Solution />" not in body and "<Recipes" not in body
+    assert "```js\n<Sandpack>\nconst x = 1;\n```" in body  # code is verbatim
+    assert "Wrap `<Suspense>` around it." in body  # inline JSX in prose is kept
+
+
+def test_mdx_fence_meta_braces_are_dropped(ref_source, react_tech):
+    md = "## A\n\n```js {expectedErrors: {'react-compiler': [5, 6]}} src/List.js\nlet a;\n```\n"
+    body = _md(ref_source, react_tech, md).body
+    assert "```js src/List.js\nlet a;\n```" in body

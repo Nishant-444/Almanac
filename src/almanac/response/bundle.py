@@ -5,15 +5,73 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from almanac.chunker import estimate_tokens
+from almanac.chunker import _FENCE_RE, _HEADING_RE, _fence_close_ok, estimate_tokens
 from almanac.query.retrieve import Hit
 from almanac.query.understand import Interpretation
 
 MAX_EXCERPTS = 4
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _PARA_BREAK = re.compile(r"\n\n+")
+_MIN_PROSE = 0.3  # an answer needs at least this share of explanatory text, not just code
+_PROSE_SCORE_FLOOR = 0.5  # ...but only a hit scoring at least half the best one may replace it
+
+
+def _merge_adjacent(hits: list[Hit]) -> list[Hit]:
+    """Join hits that are consecutive chunks of one section, in page order, at the best one's rank."""
+    rank = {id(h): n for n, h in enumerate(hits)}
+    groups: list[list[Hit]] = []
+    for h in sorted(hits, key=lambda h: (h.page_id, h.anchor, h.ord)):
+        prev = groups[-1][-1] if groups else None
+        if prev and (prev.page_id, prev.anchor) == (h.page_id, h.anchor) and h.ord == prev.ord + 1:
+            groups[-1].append(h)
+        else:
+            groups.append([h])
+    merged: list[tuple[int, Hit]] = []
+    for g in groups:
+        text = g[0].text
+        for nxt in g[1:]:
+            head, sep, tail = nxt.text.partition("\n\n")
+            # chunks after the first open with the previous chunk's last sentence as overlap
+            if sep and head.strip() and text.rstrip().endswith(head.strip()):
+                text = f"{text}\n\n{tail}"
+            else:
+                text = f"{text}\n\n{nxt.text}"
+        first = min(rank[id(h)] for h in g)  # the group keeps its best hit's place in the ranking
+        best = hits[first]
+        merged.append((first, replace(g[0], text=text, score=best.score, chunk_id=best.chunk_id)))
+    return [h for _, h in sorted(merged, key=lambda p: p[0])]
+
+
+def _prose_share(text: str) -> float:
+    """Share of non-blank characters outside code fences and heading lines."""
+    prose = total = 0
+    opener: str | None = None
+    for line in text.splitlines():
+        n = len(line.strip())
+        total += n
+        if opener is not None:
+            if _fence_close_ok(line, opener):
+                opener = None
+            continue
+        if fence := _FENCE_RE.match(line):
+            opener = fence.group(1)
+        elif not _HEADING_RE.match(line):
+            prose += n
+    return prose / total if total else 0.0
+
+
+def _prefer_prose_answer(hits: list[Hit]) -> list[Hit]:
+    """Put the best mostly-prose hit first when the top hit is mostly code and a close one exists."""
+    if not hits or _prose_share(hits[0].text) >= _MIN_PROSE:
+        return hits
+    floor = hits[0].score * _PROSE_SCORE_FLOOR
+    for n, h in enumerate(hits[1:], 1):
+        if h.score >= floor and _prose_share(h.text) >= _MIN_PROSE:
+            return [h, *hits[:n], *hits[n + 1 :]]
+    return hits
 
 
 def _measure(b: dict) -> int:
@@ -151,6 +209,7 @@ def build_bundle(
     if not hits:
         raise ValueError("build_bundle requires at least one hit; use not_found()")
     query_id = "q_" + uuid.uuid4().hex[:12]
+    hits = _prefer_prose_answer(_merge_adjacent(hits))
     kept = hits[: 1 + MAX_EXCERPTS]
     text = hits[0].text
 
